@@ -24,3 +24,16 @@ export async function launchPuppeteer(
   const { DPuppeteerBrowser } = await import("../puppeteer");
   return new DPuppeteerBrowser(pBrowser, userDataDir, options.metaMaskFlask);
 }
+
+export async function connectPuppeteer(
+  browserWSEndpoint: string
+): Promise<DappeteerBrowser> {
+  const pBrowser = await (
+    await import("puppeteer")
+  ).default.connect({
+    browserWSEndpoint,
+    defaultViewport: null,
+  });
+  const { DPuppeteerBrowser } = await import("../puppeteer");
+  return new DPuppeteerBrowser(pBrowser, null, false);
+}

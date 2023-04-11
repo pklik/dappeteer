@@ -13,6 +13,7 @@ export {
   bootstrap,
   initSnapEnv,
   launch,
+  connect,
   setupMetaMask,
   setupBootstrappedMetaMask,
 } from "./setup";

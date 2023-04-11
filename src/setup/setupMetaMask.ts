@@ -68,9 +68,35 @@ export async function setupMetaMask<Options = MetaMaskOptions>(
   return getMetaMask(page);
 }
 
+export async function isUnlocked(page: DappeteerPage): Promise<boolean> {
+  try {
+    console.log('chhh');
+    await page.waitForSelector(".home__container", { timeout: 10_000 });
+    console.log('c__');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+export async function isLockScreen(page: DappeteerPage): Promise<boolean> {
+  // `home.html#unlock`
+  return page.url().endsWith("unlock");
+}
+
+export async function isSetupScreen(page: DappeteerPage): Promise<boolean> {
+  try {
+    await page.waitForSelector("text/Let's get started", { timeout: 10_000 });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 export async function setupBootstrappedMetaMask(
   browser: DappeteerBrowser,
-  password: string
+  password: string,
+  skipLogin: boolean = false
 ): Promise<Dappeteer> {
   const page = await getMetaMaskPage(browser);
   const metaMask = await getMetaMask(page);
@@ -78,16 +104,35 @@ export async function setupBootstrappedMetaMask(
   await metaMask.page.evaluate(() => {
     (window as unknown as { signedIn: boolean }).signedIn = false;
   });
-  await page.waitForTimeout(100);
-  await waitForOverlay(page);
-  if (browser.isMetaMaskFlask()) await waitForOverlay(page);
-  await retry(() => metaMask.unlock(password), 3);
+
+  if (!skipLogin) {
+    await page.waitForTimeout(100);
+    await waitForOverlay(page);
+    if (browser.isMetaMaskFlask()) await waitForOverlay(page);
+    await retry(() => metaMask.unlock(password), 3);
+  }
+
+  // Close eventual "what's new popups"
+  const closeWhatsNew =
+    '//section[contains(@class, "whats-new-popup")]//button[@data-testid="popover-close"]';
+  for (let i = 0; i < 10; ++i) {
+    try {
+      // Close the what's new popup
+      const closeBtn = await page.waitForXPath(closeWhatsNew, {
+        timeout: 1000,
+      });
+      await closeBtn.click();
+    } catch (e) {
+      // Not found -> break
+      break;
+    }
+  }
 
   await waitForOverlay(page);
   return metaMask;
 }
 
-async function getMetaMaskPage(
+export async function getMetaMaskPage(
   browser: DappeteerBrowser
 ): Promise<DappeteerPage> {
   const pages = await browser.pages();

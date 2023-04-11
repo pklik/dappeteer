@@ -3,7 +3,15 @@ import { DappeteerPage } from "../page";
 import { InstallSnapOptions } from "../snap/install";
 import { Dappeteer, DappeteerLaunchOptions, MetaMaskOptions } from "../types";
 import { launch } from "./launch";
-import { setupBootstrappedMetaMask, setupMetaMask } from "./setupMetaMask";
+import {
+  getMetaMaskPage,
+  setupBootstrappedMetaMask,
+  setupMetaMask,
+  isUnlocked,
+  isLockScreen,
+  isSetupScreen,
+} from "./setupMetaMask";
+import { connectPuppeteer } from "./puppeteer";
 
 export * from "./launch";
 export * from "./setupMetaMask";
@@ -29,6 +37,80 @@ export const bootstrap = async ({
         password,
         showTestNets,
       }));
+
+  return {
+    metaMask,
+    browser,
+    metaMaskPage: metaMask.page,
+  };
+};
+
+export const connect = async ({
+  seed,
+  password,
+  showTestNets,
+  browserWSEndpoint,
+  metaMaskUrl,
+}: DappeteerLaunchOptions &
+  MetaMaskOptions & {
+    browserWSEndpoint: string;
+    metaMaskUrl: string;
+  }): Promise<{
+  metaMask: Dappeteer;
+  browser: DappeteerBrowser;
+  metaMaskPage: DappeteerPage;
+}> => {
+  const browser = await connectPuppeteer(browserWSEndpoint);
+
+  if (metaMaskUrl) {
+    // Make sure that there is exactly one metamask tab open
+    const pages = (await browser.pages()).map((page) => {
+      return {
+        page,
+        isMetamask: page.url().startsWith(metaMaskUrl),
+      };
+    });
+
+    let numMetamaskPagesFound = 0;
+    for (let i = 0; i < pages.length; ++i) {
+      if (pages[i].isMetamask) numMetamaskPagesFound++;
+      if (numMetamaskPagesFound > 1) await pages[i].page.close();
+    }
+
+    if (numMetamaskPagesFound === 0) {
+      const metamaskPage = await browser.newPage();
+      await metamaskPage.goto(metaMaskUrl);
+    }
+  }
+
+  const metaMaskPage = await getMetaMaskPage(browser);
+
+  // Metamask is dumb
+  await metaMaskPage.reload();
+
+  let _isUnlocked, _isSetupScreen;
+  const _isLockScreen = await isLockScreen(metaMaskPage);
+  if (!_isLockScreen) {
+    _isUnlocked = await isUnlocked(metaMaskPage);
+  }
+  if (!_isLockScreen && !_isUnlocked) {
+    _isSetupScreen = await isSetupScreen(metaMaskPage);
+  }
+
+  let metaMask: Dappeteer;
+  if (_isSetupScreen) {
+    metaMask = await setupMetaMask(browser, {
+      seed,
+      password,
+      showTestNets,
+    });
+  } else if (_isLockScreen) {
+    metaMask = await setupBootstrappedMetaMask(browser, password);
+  } else if (_isUnlocked) {
+    metaMask = await setupBootstrappedMetaMask(browser, password, true);
+  } else {
+    throw new Error("MetaMask not found in opened tabs");
+  }
 
   return {
     metaMask,
