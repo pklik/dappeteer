@@ -16,6 +16,7 @@ export {
   connect,
   setupMetaMask,
   setupBootstrappedMetaMask,
+  getExtensionHomeUrl,
 } from "./setup";
 export { DapeteerJestConfig } from "./jest/global";
 

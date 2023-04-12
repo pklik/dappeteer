@@ -11,7 +11,7 @@ import {
   closeWhatsNewModal,
   enableEthSign,
   importAccount,
-  showTestNets,
+  showTestNets
 } from "./setupActions";
 
 /**
@@ -28,7 +28,7 @@ const defaultMetaMaskSteps: Step<MetaMaskOptions>[] = [
   showTestNets,
   enableEthSign,
   closeWhatsNewModal,
-  closeWhatsNewModal,
+  closeWhatsNewModal
 ];
 
 const flaskMetaMaskSteps: Step<MetaMaskOptions>[] = [
@@ -38,7 +38,7 @@ const flaskMetaMaskSteps: Step<MetaMaskOptions>[] = [
   enableEthSign,
   closePortfolioTooltip,
   closeWhatsNewModal,
-  closeWhatsNewModal,
+  closeWhatsNewModal
 ];
 
 const MM_HOME_REGEX = "chrome-extension://[a-z]+/home.html";
@@ -68,31 +68,21 @@ export async function setupMetaMask<Options = MetaMaskOptions>(
   return getMetaMask(page);
 }
 
-export async function isUnlocked(page: DappeteerPage): Promise<boolean> {
-  try {
-    await page.waitForSelector(".home__container", { timeout: 10_000 });
-    return true;
-  } catch (_) {
-    return false;
-  }
+export function isUnlocked(page: DappeteerPage): boolean {
+  return page.url().match(/home\.html#*$/) !== null;
 }
 
-export async function isRestoreVault(page: DappeteerPage): Promise<boolean> {
-  return page.url().endsWith("restore-vault");
+export function isRestoreVault(page: DappeteerPage): boolean {
+  return page.url().match(/#restore-vault#*$/) !== null;
 }
 
-export async function isLockScreen(page: DappeteerPage): Promise<boolean> {
+export function isLockScreen(page: DappeteerPage): boolean {
   // `home.html#unlock`
-  return page.url().endsWith("unlock");
+  return page.url().match(/#unlock#*$/) !== null;
 }
 
-export async function isSetupScreen(page: DappeteerPage): Promise<boolean> {
-  try {
-    await page.waitForSelector("text/Let's get started", { timeout: 10_000 });
-    return true;
-  } catch (_) {
-    return false;
-  }
+export function isSetupScreen(page: DappeteerPage): boolean {
+  return page.url().match(/welcome#*$/) !== null;
 }
 
 export async function setupBootstrappedMetaMask(
@@ -122,7 +112,7 @@ export async function setupBootstrappedMetaMask(
       // Close the what's new popup
       // https://community.metamask.io/t/can-i-disable-lavamoat/24845/4
       const closeBtn = await page.waitForXPath(closeWhatsNew, {
-        timeout: 1000,
+        timeout: 1000
       });
       await closeBtn.click();
     } catch (e) {
@@ -132,7 +122,7 @@ export async function setupBootstrappedMetaMask(
   }
 
   try {
-    const gotItBtn = await page.waitForXPath('//button[text()="Got it"]', { timeout: 500 });
+    const gotItBtn = await page.waitForXPath("//button[text()=\"Got it\"]", { timeout: 500 });
     await gotItBtn.click();
   } catch (_) {}
 

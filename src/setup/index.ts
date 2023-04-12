@@ -46,26 +46,44 @@ export const bootstrap = async ({
   };
 };
 
-const getMetamaskExtensionId = async (
+const getExtensionId = async (
+  extensionName: string | RegExp = "MetaMask",
   browser: DappeteerBrowser
-): Promise<string> => {
-  // Try to get it from chrome extension tab. A bit tricky, because this is
+): Promise<string | null> => {
+  // Try to get it from Chrome extension tab. A bit tricky, because this is
   // a protected page
   const page = await browser.newPage();
   await page.goto("chrome://extensions");
-  const extensionNames = await page.$$("pierce/div div div div div div");
-  const extensionIdStrings = await page.$$(
-    "pierce/div div div div.bounded-text"
+
+  // Enable Developer mode - Required to show the extension ID
+  const devModeToggle = await page.$("pierce/#devMode");
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const devModeEnabled = await page.evaluate(
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return
+    (elem) => elem.checked,
+    devModeToggle["element"]
   );
+  if (!devModeEnabled) await devModeToggle.click();
+
+  const extensionNames = await page.$$("pierce/#name-and-version div");
+  const extensionIdStrings = await page.$$("pierce/#extension-id");
+
+  if (extensionNames.length !== extensionIdStrings.length) {
+    console.error(
+      "Length mismatch on Extensions page. Is developer mode enabled?"
+    );
+    await page.close();
+    return null;
+  }
 
   for (let i = 0; i < extensionNames.length; ++i) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const text = await page.evaluate(
+    const text: string = await page.evaluate(
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return
       (elem) => elem.textContent,
       extensionNames[i]["element"]
     );
-    if (text !== "MetaMask") continue;
+    if (!text.toString().match(extensionName)) continue;
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
     const extensionString = await page.evaluate(
@@ -75,6 +93,22 @@ const getMetamaskExtensionId = async (
     await page.close();
     return extensionString.split(" ")[1];
   }
+  await page.close();
+  return null;
+};
+
+export const getExtensionHomeUrl = async (
+  extensionName: string,
+  browser: DappeteerBrowser
+): Promise<string> => {
+  const extensionId = await getExtensionId(extensionName, browser);
+  if (extensionId === null) return null;
+  if (extensionName.match(/^metamask/i)) {
+    return `chrome-extension://${extensionId}/home.html`;
+  } else if (extensionName.match(/^braavos/i)) {
+    return `chrome-extension://${extensionId}/index.html`;
+  }
+  return null;
 };
 
 export const connect = async ({
@@ -95,8 +129,7 @@ export const connect = async ({
   const browser = await connectPuppeteer(browserWSEndpoint);
 
   if (!metaMaskUrl) {
-    const extensionId = await getMetamaskExtensionId(browser);
-    metaMaskUrl = `chrome-extension://${extensionId}/home.html`;
+    metaMaskUrl = await getExtensionHomeUrl("MetaMask", browser);
   }
 
   // Make sure that there is exactly one metamask tab open
@@ -124,19 +157,19 @@ export const connect = async ({
   await metaMaskPage.reload();
 
   let _isUnlocked, _isSetupScreen;
-  const _isRestoreVault = await isRestoreVault(metaMaskPage);
+  const _isRestoreVault = isRestoreVault(metaMaskPage);
   if (_isRestoreVault) {
     await metaMaskPage.goto(
       metaMaskPage.url().replace("restore-vault", "unlock")
     );
   }
 
-  const _isLockScreen = await isLockScreen(metaMaskPage);
+  const _isLockScreen = isLockScreen(metaMaskPage);
   if (!_isLockScreen) {
-    _isUnlocked = await isUnlocked(metaMaskPage);
+    _isUnlocked = isUnlocked(metaMaskPage);
   }
   if (!_isLockScreen && !_isUnlocked) {
-    _isSetupScreen = await isSetupScreen(metaMaskPage);
+    _isSetupScreen = isSetupScreen(metaMaskPage);
   }
 
   let metaMask: Dappeteer;
