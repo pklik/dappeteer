@@ -10,6 +10,7 @@ import {
   isUnlocked,
   isLockScreen,
   isSetupScreen,
+  isRestoreVault,
 } from "./setupMetaMask";
 import { connectPuppeteer } from "./puppeteer";
 
@@ -45,6 +46,37 @@ export const bootstrap = async ({
   };
 };
 
+const getMetamaskExtensionId = async (
+  browser: DappeteerBrowser
+): Promise<string> => {
+  // Try to get it from chrome extension tab. A bit tricky, because this is
+  // a protected page
+  const page = await browser.newPage();
+  await page.goto("chrome://extensions");
+  const extensionNames = await page.$$("pierce/div div div div div div");
+  const extensionIdStrings = await page.$$(
+    "pierce/div div div div.bounded-text"
+  );
+
+  for (let i = 0; i < extensionNames.length; ++i) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const text = await page.evaluate(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return
+      (elem) => elem.textContent,
+      extensionNames[i]["element"]
+    );
+    if (text !== "MetaMask") continue;
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+    const extensionString = await page.evaluate(
+      (elem: Element) => elem.textContent,
+      extensionIdStrings[i]["element"]
+    );
+    await page.close();
+    return extensionString.split(" ")[1];
+  }
+};
+
 export const connect = async ({
   seed,
   password,
@@ -62,25 +94,28 @@ export const connect = async ({
 }> => {
   const browser = await connectPuppeteer(browserWSEndpoint);
 
-  if (metaMaskUrl) {
-    // Make sure that there is exactly one metamask tab open
-    const pages = (await browser.pages()).map((page) => {
-      return {
-        page,
-        isMetamask: page.url().startsWith(metaMaskUrl),
-      };
-    });
+  if (!metaMaskUrl) {
+    const extensionId = await getMetamaskExtensionId(browser);
+    metaMaskUrl = `chrome-extension://${extensionId}/home.html`;
+  }
 
-    let numMetamaskPagesFound = 0;
-    for (let i = 0; i < pages.length; ++i) {
-      if (pages[i].isMetamask) numMetamaskPagesFound++;
-      if (numMetamaskPagesFound > 1) await pages[i].page.close();
-    }
+  // Make sure that there is exactly one metamask tab open
+  const pages = (await browser.pages()).map((page) => {
+    return {
+      page,
+      isMetamask: page.url().startsWith(metaMaskUrl),
+    };
+  });
 
-    if (numMetamaskPagesFound === 0) {
-      const metamaskPage = await browser.newPage();
-      await metamaskPage.goto(metaMaskUrl);
-    }
+  let numMetamaskPagesFound = 0;
+  for (let i = 0; i < pages.length; ++i) {
+    if (pages[i].isMetamask) numMetamaskPagesFound++;
+    if (numMetamaskPagesFound > 1) await pages[i].page.close();
+  }
+
+  if (numMetamaskPagesFound === 0) {
+    const metamaskPage = await browser.newPage();
+    await metamaskPage.goto(metaMaskUrl);
   }
 
   const metaMaskPage = await getMetaMaskPage(browser);
@@ -89,6 +124,13 @@ export const connect = async ({
   await metaMaskPage.reload();
 
   let _isUnlocked, _isSetupScreen;
+  const _isRestoreVault = await isRestoreVault(metaMaskPage);
+  if (_isRestoreVault) {
+    await metaMaskPage.goto(
+      metaMaskPage.url().replace("restore-vault", "unlock")
+    );
+  }
+
   const _isLockScreen = await isLockScreen(metaMaskPage);
   if (!_isLockScreen) {
     _isUnlocked = await isUnlocked(metaMaskPage);

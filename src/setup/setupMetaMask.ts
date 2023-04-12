@@ -70,13 +70,15 @@ export async function setupMetaMask<Options = MetaMaskOptions>(
 
 export async function isUnlocked(page: DappeteerPage): Promise<boolean> {
   try {
-    console.log('chhh');
     await page.waitForSelector(".home__container", { timeout: 10_000 });
-    console.log('c__');
     return true;
   } catch (_) {
     return false;
   }
+}
+
+export async function isRestoreVault(page: DappeteerPage): Promise<boolean> {
+  return page.url().endsWith("restore-vault");
 }
 
 export async function isLockScreen(page: DappeteerPage): Promise<boolean> {
@@ -118,6 +120,7 @@ export async function setupBootstrappedMetaMask(
   for (let i = 0; i < 10; ++i) {
     try {
       // Close the what's new popup
+      // https://community.metamask.io/t/can-i-disable-lavamoat/24845/4
       const closeBtn = await page.waitForXPath(closeWhatsNew, {
         timeout: 1000,
       });
@@ -127,6 +130,11 @@ export async function setupBootstrappedMetaMask(
       break;
     }
   }
+
+  try {
+    const gotItBtn = await page.waitForXPath('//button[text()="Got it"]', { timeout: 500 });
+    await gotItBtn.click();
+  } catch (_) {}
 
   await waitForOverlay(page);
   return metaMask;
